@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING, Any, Iterable, Mapping, Optional, Sequence, Ty
 
 import dagster._check as check
 from dagster._annotations import experimental, public
+from dagster._core.definitions.decorators.job_decorator import PendingJobDefinition
 from dagster._core.definitions.events import AssetKey, CoercibleToAssetKey
 from dagster._core.definitions.executor_definition import ExecutorDefinition
 from dagster._core.definitions.logger_definition import LoggerDefinition
@@ -65,7 +66,9 @@ def _create_repository_using_definitions_args(
     ] = None,
     schedules: Optional[Iterable[ScheduleDefinition]] = None,
     sensors: Optional[Iterable[SensorDefinition]] = None,
-    jobs: Optional[Iterable[Union[JobDefinition, UnresolvedAssetJobDefinition]]] = None,
+    jobs: Optional[
+        Iterable[Union[JobDefinition, UnresolvedAssetJobDefinition, PendingJobDefinition]]
+    ] = None,
     resources: Optional[Mapping[str, Any]] = None,
     executor: Optional[ExecutorDefinition] = None,
     loggers: Optional[Mapping[str, LoggerDefinition]] = None,
@@ -82,7 +85,9 @@ def _create_repository_using_definitions_args(
         check.iterable_param(sensors, "sensors", SensorDefinition)
 
     if jobs:
-        check.iterable_param(jobs, "jobs", (JobDefinition, UnresolvedAssetJobDefinition))
+        check.iterable_param(
+            jobs, "jobs", (JobDefinition, UnresolvedAssetJobDefinition, PendingJobDefinition)
+        )
 
     if resources:
         check.mapping_param(resources, "resources", key_type=str)
@@ -95,6 +100,13 @@ def _create_repository_using_definitions_args(
 
     resource_defs = wrap_resources_for_execution(resources or {})
 
+    new_jobs = []
+    for job in jobs or []:
+        if isinstance(job, PendingJobDefinition):
+            new_jobs.append(job.bind_job_to_resources(resource_defs))
+        else:
+            new_jobs.append(job)
+
     @repository(
         name=name,
         default_executor_def=executor,
@@ -105,7 +117,7 @@ def _create_repository_using_definitions_args(
             *with_resources(assets or [], resource_defs),
             *(schedules or []),
             *(sensors or []),
-            *(jobs or []),
+            *new_jobs,
         ]
 
     return created_repo
