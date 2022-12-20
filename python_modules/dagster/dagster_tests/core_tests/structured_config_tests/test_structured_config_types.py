@@ -192,7 +192,7 @@ def test_nested_discriminated_unions():
     @op
     def a_struct_config_op(config: OpConfigWithUnion):
 
-        assert config.pet.breed.fluffy
+        assert config.pet.breed.fluffy  # type: ignore[union-attr]
 
         executed["yes"] = True
 

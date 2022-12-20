@@ -286,7 +286,7 @@ def _convert_pydantic_descriminated_union_field(pydantic_field: ModelField) -> F
     })
     """
 
-    if not all(
+    if not pydantic_field.sub_fields_mapping or not all(
         issubclass(pydantic_field.type_, Config)
         for pydantic_field in pydantic_field.sub_fields_mapping.values()
     ):
@@ -296,6 +296,7 @@ def _convert_pydantic_descriminated_union_field(pydantic_field: ModelField) -> F
     # Dagster config fields that correspond to them. We strip the descriminator key
     # from the fields, since the user should not have to specify it.
 
+    assert pydantic_field.sub_fields_mapping
     dagster_config_field_mapping = {
         descriminator_value: infer_schema_from_config_class(
             field.type_, ignore_pydantic_fields={pydantic_field.field_info.discriminator}
