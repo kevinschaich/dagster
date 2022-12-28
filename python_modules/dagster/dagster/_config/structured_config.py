@@ -1,7 +1,10 @@
 import inspect
 
+from dagster._config.post_process import post_process_config
 from dagster._config.source import BoolSource, IntSource, StringSource
+from dagster._config.validate import process_config
 from dagster._core.definitions.definition_config_schema import IDefinitionConfigSchema
+from dagster._core.errors import DagsterInvalidConfigError
 
 try:
     from functools import cached_property
@@ -12,7 +15,7 @@ except ImportError:
 
 
 from abc import ABC, abstractmethod
-from typing import Any, Optional, Type, cast
+from typing import Any, Mapping, Optional, Type, cast
 
 from pydantic import BaseModel
 from pydantic.fields import SHAPE_SINGLETON, ModelField
@@ -61,6 +64,21 @@ class Config(MakeConfigCacheable):
     """
 
 
+def _post_process_values(schema_field: Field, data: Mapping[str, Any]) -> Mapping[str, Any]:
+    post_processed_config = process_config(
+        schema_field.config_type, config_dictionary_from_values(data, schema_field)
+    )
+
+    if not post_processed_config.success:
+        raise DagsterInvalidConfigError(
+            "Error in config mapping ",
+            post_processed_config.errors,
+            data,
+        )
+
+    return post_processed_config.value
+
+
 def _curry_config_schema(schema_field: Field, data: Any) -> IDefinitionConfigSchema:
     """Return a new config schema configured with the passed in data"""
 
@@ -102,7 +120,7 @@ class Resource(
 
     def __init__(self, **data: Any):
         schema = infer_schema_from_config_class(self.__class__)
-        Config.__init__(self, **data)
+        Config.__init__(self, **_post_process_values(schema, data))
         ResourceDefinition.__init__(
             self,
             resource_fn=self.create_object_to_pass_to_user_code,
@@ -173,7 +191,7 @@ class StructuredConfigIOManagerBase(IOManagerDefinition, Config, ABC):
 
     def __init__(self, **data: Any):
         schema = infer_schema_from_config_class(self.__class__)
-        Config.__init__(self, **data)
+        Config.__init__(self, **_post_process_values(schema, data))
         IOManagerDefinition.__init__(
             self,
             resource_fn=self.create_io_manager_to_pass_to_user_code,
