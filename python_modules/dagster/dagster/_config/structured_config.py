@@ -64,19 +64,21 @@ class Config(MakeConfigCacheable):
     """
 
 
-def _post_process_values(schema_field: Field, data: Mapping[str, Any]) -> Mapping[str, Any]:
+def _process_config_values(
+    schema_field: Field, data: Mapping[str, Any], config_obj_name: str
+) -> Mapping[str, Any]:
     post_processed_config = process_config(
         schema_field.config_type, config_dictionary_from_values(data, schema_field)
     )
 
     if not post_processed_config.success:
         raise DagsterInvalidConfigError(
-            "Error in config mapping ",
+            "Error while processing {} config ".format(config_obj_name),
             post_processed_config.errors,
             data,
         )
 
-    return post_processed_config.value
+    return post_processed_config.value or {}
 
 
 def _curry_config_schema(schema_field: Field, data: Any) -> IDefinitionConfigSchema:
@@ -120,7 +122,7 @@ class Resource(
 
     def __init__(self, **data: Any):
         schema = infer_schema_from_config_class(self.__class__)
-        Config.__init__(self, **_post_process_values(schema, data))
+        Config.__init__(self, **_process_config_values(schema, data, self.__class__.__name__))
         ResourceDefinition.__init__(
             self,
             resource_fn=self.create_object_to_pass_to_user_code,
@@ -191,7 +193,7 @@ class StructuredConfigIOManagerBase(IOManagerDefinition, Config, ABC):
 
     def __init__(self, **data: Any):
         schema = infer_schema_from_config_class(self.__class__)
-        Config.__init__(self, **_post_process_values(schema, data))
+        Config.__init__(self, **_process_config_values(schema, data, self.__class__.__name__))
         IOManagerDefinition.__init__(
             self,
             resource_fn=self.create_io_manager_to_pass_to_user_code,
