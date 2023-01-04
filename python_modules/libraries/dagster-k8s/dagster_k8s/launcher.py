@@ -379,6 +379,14 @@ class K8sRunLauncher(RunLauncher, ConfigurableClass):
             return CheckRunHealthResult(
                 WorkerStatus.UNKNOWN, str(serializable_error_info_from_exc_info(sys.exc_info()))
             )
+
+        # If the run has STARTED but there are no running pods, something went wrong
+        # Are there any other statuses with this property?
+        if run.status == DagsterRunStatus.STARTED and not status.active:
+            return CheckRunHealthResult(
+                WorkerStatus.FAILED, "Run has started but K8s job has no active pods"
+            )
+
         if status.failed:
             return CheckRunHealthResult(WorkerStatus.FAILED, "K8s job failed")
         if status.succeeded:
