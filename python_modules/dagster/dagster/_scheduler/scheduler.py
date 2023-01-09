@@ -18,7 +18,7 @@ from dagster._core.errors import DagsterUserCodeUnreachableError
 from dagster._core.host_representation import ExternalSchedule, PipelineSelector
 from dagster._core.host_representation.repository_location import RepositoryLocation
 from dagster._core.instance import DagsterInstance
-from dagster._core.instance.persist_run_for_production import persist_run_for_production
+from dagster._core.instance.persist_run import persist_run
 from dagster._core.scheduler.instigation import (
     InstigatorState,
     InstigatorStatus,
@@ -733,7 +733,7 @@ def _create_scheduler_run(
         },
     )
 
-    return persist_run_for_production(
+    return persist_run(
         instance=instance,
         repository_location=repo_location,
         pipeline_selector=pipeline_selector,
