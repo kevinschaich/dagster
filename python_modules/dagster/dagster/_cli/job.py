@@ -39,7 +39,7 @@ from dagster._core.host_representation import (
 from dagster._core.host_representation.external_data import ExternalPartitionSetExecutionParamData
 from dagster._core.host_representation.selector import PipelineSelector
 from dagster._core.instance import DagsterInstance
-from dagster._core.instance.persist_run_for_production import persist_run_for_production
+from dagster._core.instance.persist_run import persist_run
 from dagster._core.snap import PipelineSnapshot, SolidInvocationSnap
 from dagster._core.storage.tags import MEMOIZED_RUN_TAG
 from dagster._core.telemetry import log_external_repo_stats, telemetry_wrapper
@@ -524,7 +524,7 @@ def _create_external_pipeline_run(
         solid_selection=solid_selection,
     )
 
-    return persist_run_for_production(
+    return persist_run(
         instance=instance,
         repository_location=repo_location,
         pipeline_selector=pipeline_selector,
