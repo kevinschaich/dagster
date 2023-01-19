@@ -130,6 +130,46 @@ defs = Definitions(
 )
 ```
 
+## Step 4: Set up a GitHub action to cache your dbt Cloud job's compilation
+
+<Note>This step is optional.</Note>
+
+In Step 2, your dbt project is compiled when your Dagster definitions are first loaded. Because of this compilation step, you may encounter high latency when you load your code locations as you wait for the compilation to complete. Instead of compiling at runtime, a cached compilation can be used. A reference to this cached compilation can be created by using a GitHub action on your dbt Cloud project.
+
+You'll need the following secrets in your GitHub repository:
+
+- `DBT_CLOUD_API_TOKEN` - The API token for your dbt Cloud account, as described in the [Prerequisites](#Prerequisites).
+- `DBT_CLOUD_ACCOUNT_ID` - The id of your dbt Cloud account, as described in the [Prerequisites](#Prerequisites).
+- `DBT_CLOUD_PROJECT_ID` - The id of your dbt Cloud project, that corresponds to the dbt project managed in git.
+
+Then, add a GitHub action that will cache the compilation of your dbt project. This action can be triggered on a push to your main branch.
+
+```yaml
+name: Compile dbt Cloud project
+on:
+  push:
+    branches:
+      - main
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: "3.9"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install dagster_dbt
+      - name: Run commit script
+        run: python -m dagster_dbt.cloud.cli cache-compile-references
+        env:
+          DBT_CLOUD_API_TOKEN: ${{ secrets.DBT_CLOUD_API_TOKEN }}
+          DBT_CLOUD_ACCOUNT_ID: ${{ secrets.DBT_CLOUD_ACCOUNT_ID }}
+          DBT_CLOUD_PROJECT_ID: ${{ secrets.DBT_CLOUD_PROJECT_ID }}
+```
+
 ## What's next?
 
 By now, you should have a working dbt Cloud and Dagster integration and a handful of materialized Dagster assets.
