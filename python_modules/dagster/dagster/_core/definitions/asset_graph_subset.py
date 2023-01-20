@@ -21,19 +21,19 @@ class AssetGraphSubset:
         self._non_partitioned_asset_keys = non_partitioned_asset_keys or set()
 
     @property
-    def asset_graph(self):
+    def asset_graph(self) -> AssetGraph:
         return self._asset_graph
 
     @property
-    def partitions_subsets_by_asset_key(self):
+    def partitions_subsets_by_asset_key(self) -> Mapping[AssetKey, PartitionsSubset]:
         return self._partitions_subsets_by_asset_key
 
     @property
-    def non_partitioned_asset_keys(self):
+    def non_partitioned_asset_keys(self) -> AbstractSet[AssetKey]:
         return self._non_partitioned_asset_keys
 
     @property
-    def asset_keys(self) -> Iterable[AssetKey]:
+    def asset_keys(self) -> AbstractSet[AssetKey]:
         return self.partitions_subsets_by_asset_key.keys() | self._non_partitioned_asset_keys
 
     @property
@@ -119,6 +119,7 @@ class AssetGraphSubset:
             isinstance(other, AssetGraphSubset)
             and self.asset_graph == other.asset_graph
             and self.partitions_subsets_by_asset_key == other.partitions_subsets_by_asset_key
+            and self.non_partitioned_asset_keys == other.non_partitioned_asset_keys
         )
 
     def __repr__(self) -> str:

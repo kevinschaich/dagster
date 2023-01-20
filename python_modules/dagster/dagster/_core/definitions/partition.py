@@ -271,6 +271,12 @@ class PartitionsDefinition(ABC, Generic[T]):
     def empty_subset(self) -> "PartitionsSubset":
         return DefaultPartitionsSubset(self, set())
 
+    def subset_with_partition_keys(self, partition_keys: Iterable[str]) -> "PartitionsSubset":
+        return self.empty_subset().with_partition_keys(partition_keys)
+
+    def subset_with_all_partitions(self) -> "PartitionsSubset":
+        return self.subset_with_partition_keys(self.get_partition_keys())
+
     def deserialize_subset(self, serialized: str) -> "PartitionsSubset":
         return DefaultPartitionsSubset.from_serialized(self, serialized)
 
