@@ -17,6 +17,7 @@ from dagster._core.host_representation.external import ExternalPipeline
 from dagster._core.host_representation.external_data import (
     ExternalAssetNode,
     ExternalMultiPartitionsDefinitionData,
+    ExternalMutablePartitionsDefinitionData,
     ExternalStaticPartitionsDefinitionData,
     ExternalTimeWindowPartitionsDefinitionData,
 )
@@ -305,6 +306,7 @@ class GrapheneAssetNode(graphene.ObjectType):
                     ExternalStaticPartitionsDefinitionData,
                     ExternalTimeWindowPartitionsDefinitionData,
                     ExternalMultiPartitionsDefinitionData,
+                    ExternalMutablePartitionsDefinitionData,
                 ),
             ):
                 return [
