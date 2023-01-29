@@ -1,11 +1,12 @@
 import argparse
-from functools import reduce
-from itertools import groupby
 import json
 import shlex
-import sys
 import subprocess
+import sys
+from functools import reduce
+from itertools import groupby
 from typing import Sequence, cast
+
 from typing_extensions import NotRequired, TypedDict
 
 parser = argparse.ArgumentParser(

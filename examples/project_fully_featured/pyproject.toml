@@ -9,7 +9,7 @@ module_name = "project_fully_featured"
 # ##### PYRIGHT
 # ########################
 
-# As of 2022-12-2, this package has a dedicated pyright configuration because its dependencies
+# As of 2023-02, this package has a dedicated pyright configuration because its dependencies
 # conflict with other dagster packages, preventing it from being installed in a common environment
 # with those packages and analyzed within the same pyright run. This section can be removed, and the
 # package incorporated into the root pyright environment/config, when these conflicts are resolved.

@@ -54,9 +54,9 @@ exclude = [
   ".git",
   "**/.venv*",
 
-  # These two examples have `dbt-snowflake` as a dependency, which as of 2022-12-21 causes build
-  # problems when used with dagster-snowflake-pandas. They have their own pyright configurations in their respective
-  # pyproject.toml files.
+  # These two examples have `dbt-snowflake` as a dependency, which as of 2023-02 causes build
+  # problems when used with dagster-snowflake-pandas. They have their own pyright configurations in
+  # their respective pyproject.toml files.
   "examples/assets_smoke_test",
   "examples/project_fully_featured",
   "examples/quickstart_aws",
@@ -75,9 +75,8 @@ venv = "pyright"
 venvPath = "./.tox"
 
 # Set to false to help us during the transition from mypy to pyright. Mypy does
-# not analyze unannotated functions by default, and so as of 2022-12 the
-# codebase contains a large number of type errors in unannotated functions. Eventually we can turn
-# off this setting entirely.
+# not analyze unannotated functions by default, and so as of 2023-02 the codebase contains a large
+# number of type errors in unannotated functions. Eventually we can turn off this setting.
 analyzeUnannotatedFunctions = false
 
 # Minimum version of Python on which code must run. This determines the standard library stubs used by
