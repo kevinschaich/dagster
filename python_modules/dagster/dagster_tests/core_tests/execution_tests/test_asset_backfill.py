@@ -1,7 +1,7 @@
 from typing import AbstractSet, Mapping, NamedTuple, Optional, Sequence, Set, Union, cast
 from unittest.mock import MagicMock, patch
 
-import pendulum
+import pendulum.helpers
 import pytest
 from dagster import (
     AssetsDefinition,
@@ -67,7 +67,7 @@ assets_by_repo_name_by_scenario_name: Mapping[str, Mapping[str, Sequence[AssetsD
 @pytest.mark.parametrize("failures", ["no_failures", "root_failures", "random_half_failures"])
 @pytest.mark.parametrize("scenario_name", list(assets_by_repo_name_by_scenario_name.keys()))
 def test_scenario_to_completion(scenario_name: str, failures: str, some_or_all: str):
-    with pendulum.test(create_pendulum_time(year=2020, month=1, day=7, hour=4)):
+    with pendulum.helpers.test(create_pendulum_time(year=2020, month=1, day=7, hour=4)):
         assets_by_repo_name = assets_by_repo_name_by_scenario_name[scenario_name]
 
         asset_graph = get_asset_graph(assets_by_repo_name)

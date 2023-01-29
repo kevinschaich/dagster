@@ -17,7 +17,7 @@ DATE_FORMAT = "%Y-%m-%d"
 
 def time_window(start: str, end: str) -> TimeWindow:
     return TimeWindow(
-        cast(datetime, pendulum.parser.parse(start)), cast(datetime, pendulum.parse(end))
+        cast(datetime, pendulum.parser.parse(start)), cast(datetime, pendulum.parser.parse(end))
     )
 
 
