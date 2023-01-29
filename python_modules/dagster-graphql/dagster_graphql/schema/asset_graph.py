@@ -8,6 +8,7 @@ from dagster import (
 from dagster._core.definitions.external_asset_graph import ExternalAssetGraph
 from dagster._core.definitions.logical_version import (
     NULL_LOGICAL_VERSION,
+    StaleStatus,
 )
 from dagster._core.event_api import EventRecordsFilter
 from dagster._core.events import DagsterEventType
@@ -75,6 +76,24 @@ from .util import ResolveInfo, non_null_list
 
 if TYPE_CHECKING:
     from .external import GrapheneRepository
+
+
+class GrapheneAssetStaleStatus(graphene.Enum):
+    STALE = "STALE"
+    FRESH = "FRESH"
+    UNKNOWN = "UNKNOWN"
+
+    class Meta:
+        name = "StaleStatus"
+
+
+class GrapheneAssetStaleStatusCause(graphene.ObjectType):
+    status = GrapheneAssetStaleStatus
+    path = non_null_list(GrapheneAssetKey)
+    reason = graphene.String()
+
+    class Meta:
+        name = "StaleStatusCause"
 
 
 class GrapheneAssetDependency(graphene.ObjectType):
@@ -216,6 +235,8 @@ class GrapheneAssetNode(graphene.ObjectType):
     projectedLogicalVersion = graphene.String()
     repository = graphene.NonNull(lambda: external.GrapheneRepository)
     required_resources = non_null_list(GrapheneResourceRequirement)
+    staleStatus = graphene.Field(GrapheneAssetStaleStatus)
+    staleStatusCause = non_null_list(GrapheneAssetStaleStatusCause)
     type = graphene.Field(GrapheneDagsterType)
 
     class Meta:
@@ -362,6 +383,14 @@ class GrapheneAssetNode(graphene.ObjectType):
         return external_multipartitions_def is not None and isinstance(
             external_multipartitions_def, ExternalMultiPartitionsDefinitionData
         )
+
+    def convert_stale_status(self, status: StaleStatus) -> GrapheneAssetStaleStatus:
+        if status == StaleStatus.FRESH:
+            return GrapheneAssetStaleStatus.FRESH  # type: ignore  # (bad stubs)
+        elif status == StaleStatus.STALE:
+            return GrapheneAssetStaleStatus.STALE  # type: ignore  # (bad stubs)
+        else:
+            return GrapheneAssetStaleStatus.UNKNOWN  # type: ignore  # (bad stubs)
 
     def get_required_resource_keys(
         self, node_def_snap: Union[CompositeSolidDefSnap, SolidDefSnap]
@@ -519,7 +548,24 @@ class GrapheneAssetNode(graphene.ObjectType):
     def resolve_computeKind(self, _graphene_info: ResolveInfo) -> Optional[str]:
         return self._external_asset_node.compute_kind
 
-    def resolve_currentLogicalVersion(self, _graphene_info: ResolveInfo) -> Optional[str]:
+    def resolve_staleStatus(self, graphene_info: ResolveInfo) -> GrapheneAssetStaleStatus:
+        status = self.stale_status_loader.get_status(self._external_asset_node.asset_key)
+        return self.convert_stale_status(status)
+
+    def resolve_staleStatusLineage(
+        self, graphene_info: ResolveInfo
+    ) -> Sequence[GrapheneAssetStaleStatusCause]:
+        lineage = self.stale_status_loader.get_status_lineage(self._external_asset_node.asset_key)
+        return [
+            GrapheneAssetStaleStatusCause(
+                self.convert_stale_status(cause.status),
+                [GrapheneAssetKey(path=dep.path) for dep in cause.path],
+                cause.reason,
+            )
+            for cause in lineage
+        ]
+
+    def resolve_currentLogicalVersion(self, graphene_info: ResolveInfo) -> Optional[str]:
         version = self.stale_status_loader.get_current_logical_version(
             self._external_asset_node.asset_key
         )
