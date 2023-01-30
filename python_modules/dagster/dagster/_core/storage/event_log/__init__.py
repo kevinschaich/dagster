@@ -10,6 +10,7 @@ from .schema import (
     MutablePartitionsTable as MutablePartitionsTable,
     SqlEventLogStorageMetadata as SqlEventLogStorageMetadata,
     SqlEventLogStorageTable as SqlEventLogStorageTable,
+    MutablePartitionsDefinitions as MutablePartitionsDefinitions,
 )
 from .sql_event_log import SqlEventLogStorage as SqlEventLogStorage
 from .sqlite import (

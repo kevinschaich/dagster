@@ -59,6 +59,7 @@ from .schema import (
     MutablePartitionsTable,
     SecondaryIndexMigrationTable,
     SqlEventLogStorageTable,
+    MutablePartitionsDefinitions,
 )
 
 if TYPE_CHECKING:
