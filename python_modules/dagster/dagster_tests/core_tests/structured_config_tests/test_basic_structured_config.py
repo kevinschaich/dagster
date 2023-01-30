@@ -20,6 +20,7 @@ from dagster._config.structured_config import Config, infer_schema_from_config_c
 from dagster._config.type_printer import print_config_type_to_string
 from dagster._core.definitions.assets_job import build_assets_job
 from dagster._core.definitions.op_definition import OpDefinition
+from dagster._core.definitions.run_config import RunConfig
 from dagster._core.errors import DagsterInvalidConfigDefinitionError, DagsterInvalidConfigError
 from dagster._core.execution.context.invocation import build_op_context
 from dagster._legacy import pipeline
@@ -146,7 +147,13 @@ def test_with_assets():
         build_assets_job(
             "blah",
             [my_asset],
-            config={"ops": {"my_asset": {"config": {"a_string": "foo", "an_int": 2}}}},
+            config={
+                "ops": {
+                    "my_asset": {
+                        "config": {"a_string": "foo", "an_int": 2},
+                    },
+                },
+            },
         )
         .execute_in_process()
         .success
@@ -348,6 +355,16 @@ def test_validate_run_config():
         "resources": {"io_manager": {"config": None}},
         "loggers": {},
     }
+
+    result_with_runconfig = validate_run_config(
+        pipeline_requires_config, RunConfig(ops={"requires_config": {"foo": "bar"}})
+    )
+    assert result_with_runconfig == result
+
+    result_with_structured_in = validate_run_config(
+        pipeline_requires_config, RunConfig(ops={"requires_config": MyBasicOpConfig(foo="bar")})
+    )
+    assert result_with_structured_in == result
 
     result_with_storage = validate_run_config(
         pipeline_requires_config,
@@ -569,4 +586,34 @@ def test_schema_aliased_field():
 
     # use the alias in config space
     assert a_job.execute_in_process({"ops": {"an_op": {"config": {"schema": "bar"}}}}).success
+    assert executed["yes"]
+
+
+def test_structured_run_config():
+    class AnAssetConfig(Config):
+        a_string: str
+        an_int: int
+
+    executed = {}
+
+    @asset
+    def my_asset(config: AnAssetConfig):
+        assert config.a_string == "foo"
+        assert config.an_int == 2
+        executed["yes"] = True
+
+    assert (
+        build_assets_job(
+            "blah",
+            [my_asset],
+            config=RunConfig(
+                assets={
+                    "my_asset": AnAssetConfig(a_string="foo", an_int=2),
+                }
+            ),
+        )
+        .execute_in_process()
+        .success
+    )
+
     assert executed["yes"]
