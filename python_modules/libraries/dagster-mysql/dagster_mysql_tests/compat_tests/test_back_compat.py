@@ -363,6 +363,9 @@ def test_add_mutable_partitions_table(conn_string):
             with pytest.raises(DagsterInvalidInvocationError, match="non-existent table"):
                 instance.get_mutable_partitions("foo")
 
+            with pytest.raises(DagsterInvalidInvocationError, match="non-existent table"):
+                instance.get_mutable_partitions("foo")
+
             instance.upgrade()
             assert "mutable_partitions" in get_tables(instance)
             assert instance.get_mutable_partitions("foo") == []
