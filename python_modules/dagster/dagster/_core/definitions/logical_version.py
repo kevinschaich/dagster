@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from enum import Enum
 from hashlib import sha256
-from typing import TYPE_CHECKING, Mapping, NamedTuple, Optional, Union
+from typing import TYPE_CHECKING, Iterator, Mapping, NamedTuple, Optional, Sequence, Union
 
 from typing_extensions import Final
 
@@ -194,7 +194,7 @@ def _extract_event_data_from_entry(
 
 
 # ########################
-# ##### CACHING STALE STATUS RESOLVER
+# ##### STALENESS OPERATIONS
 # ########################
 
 
@@ -202,6 +202,15 @@ class StaleStatus(Enum):
     STALE = "STALE"
     FRESH = "FRESH"
     UNKNOWN = "UNKNOWN"
+
+
+class StaleStatusCause(NamedTuple):
+    status: StaleStatus
+    path: Sequence[AssetKey]
+    reason: str
+
+    def with_path_step(self, key: AssetKey) -> "StaleStatusCause":
+        return StaleStatusCause(self.status, [key, *self.path], self.reason)
 
 
 class CachingStaleStatusResolver:
@@ -220,6 +229,19 @@ class CachingStaleStatusResolver:
         self._asset_graph = asset_graph
 
     def get_status(self, key: AssetKey) -> StaleStatus:
+        return self._get_status(key=key)
+
+    def get_status_lineage(self, key: AssetKey) -> Sequence[StaleStatusCause]:
+        return self._get_status_lineage(key=key)
+
+    def get_current_logical_version(self, key: AssetKey) -> LogicalVersion:
+        return self._get_current_logical_version(key=key)
+
+    def get_projected_logical_version(self, key: AssetKey) -> LogicalVersion:
+        return self._get_projected_logical_version(key=key)
+
+    @cached_method
+    def _get_status(self, key: AssetKey) -> StaleStatus:
         if self._asset_graph.get_partitions_def(key):
             return StaleStatus.UNKNOWN
         current_version = self._get_current_logical_version(key=key)
@@ -231,11 +253,46 @@ class CachingStaleStatusResolver:
         else:
             return StaleStatus.STALE
 
-    def get_current_logical_version(self, key: AssetKey) -> LogicalVersion:
-        return self._get_current_logical_version(key=key)
+    @cached_method
+    def _get_status_lineage(self, key: AssetKey) -> Sequence[StaleStatusCause]:
+        if self._get_status(key) == StaleStatus.FRESH:
+            return []
+        elif self._get_current_logical_version(key=key) == NULL_LOGICAL_VERSION:
+            return [StaleStatusCause(StaleStatus.STALE, [key], "never materialized")]
+        else:
+            return list(self._get_stale_status_lineage_materialized(key))
 
-    def get_projected_logical_version(self, key: AssetKey) -> LogicalVersion:
-        return self._get_projected_logical_version(key=key)
+    def _get_stale_status_lineage_materialized(self, key: AssetKey) -> Iterator[StaleStatusCause]:
+        code_version = self._asset_graph.get_code_version(key)
+        provenance = self._get_current_logical_version_provenance(key=key)
+        if code_version is None:
+            yield StaleStatusCause(StaleStatus.UNKNOWN, [key], "code version unknown")
+        elif provenance is None or provenance.code_version is None:
+            yield StaleStatusCause(StaleStatus.UNKNOWN, [key], "previous code version unknown")
+        elif code_version != provenance.code_version:
+            yield StaleStatusCause(StaleStatus.STALE, [key], "code version changed")
+
+        proj_dep_keys = self._asset_graph.get_parents(key)
+        if provenance:
+            prov_versions = provenance.input_logical_versions
+            all_dep_keys = set(proj_dep_keys).union(prov_versions.keys())
+            for dep_key in all_dep_keys:
+                if dep_key not in prov_versions:
+                    yield StaleStatusCause(
+                        StaleStatus.STALE, [key], f"new input: {dep_key.to_user_string()}"
+                    )
+                elif key not in proj_dep_keys:
+                    yield StaleStatusCause(
+                        StaleStatus.STALE, [key], f"removed input: {dep_key.to_user_string()}"
+                    )
+                elif prov_versions[key] != self._get_projected_logical_version(key=dep_key):
+                    yield StaleStatusCause(
+                        StaleStatus.STALE, [key], f"changed input: {dep_key.to_user_string()}"
+                    )
+
+        for dep_key in proj_dep_keys:
+            for cause in self._get_status_lineage(key=dep_key):
+                yield cause.with_path_step(key)
 
     @cached_method
     def _get_current_logical_version(self, *, key: AssetKey) -> LogicalVersion:
@@ -266,27 +323,42 @@ class CachingStaleStatusResolver:
         elif self._asset_graph.get_code_version(key) is not None:
             version = self._compute_projected_new_materialization_logical_version(key)
         else:
-            materialization = self._instance.get_latest_materialization_event(key)
+            materialization = self._get_latest_materialization_event(key=key)
             if materialization is None:  # never been materialized
                 version = self._compute_projected_new_materialization_logical_version(key)
             else:
-                logical_version = extract_logical_version_from_entry(materialization)
-                provenance = extract_logical_version_provenance_from_entry(materialization)
+                current_logical_version = self._get_current_logical_version(key=key)
+                provenance = self._get_current_logical_version_provenance(key=key)
                 if (
-                    logical_version is None  # old materialization event before logical versions
+                    current_logical_version
+                    is None  # old materialization event before logical versions
                     or provenance is None  # should never happen
                     or self._is_provenance_stale(key, provenance)
                 ):
                     version = self._compute_projected_new_materialization_logical_version(key)
                 else:
-                    version = logical_version
+                    version = current_logical_version
         return version
+
+    @cached_method
+    def _get_latest_materialization_event(self, *, key: AssetKey) -> Optional[EventLogEntry]:
+        return self._instance.get_latest_materialization_event(key)
+
+    @cached_method
+    def _get_current_logical_version_provenance(
+        self, *, key: AssetKey
+    ) -> Optional[LogicalVersionProvenance]:
+        materialization = self._get_latest_materialization_event(key=key)
+        if materialization is None:
+            return None
+        else:
+            return extract_logical_version_provenance_from_entry(materialization)
 
     # Returns true if the current logical version of at least one input asset differs from the
     # recorded logical version for that asset in the provenance. This indicates that a new
     # materialization with up-to-date data would produce a different logical verson.
     def _is_provenance_stale(self, key: AssetKey, provenance: LogicalVersionProvenance) -> bool:
-        if self._has_updated_dependencies(key, provenance):
+        if self._has_updated_dependencies(key=key):
             return True
         else:
             for k, v in provenance.input_logical_versions.items():
@@ -294,12 +366,15 @@ class CachingStaleStatusResolver:
                     return True
             return False
 
-    def _has_updated_dependencies(
-        self, key: AssetKey, provenance: LogicalVersionProvenance
-    ) -> bool:
-        curr_dep_keys = self._asset_graph.get_parents(key)
-        old_dep_keys = set(provenance.input_logical_versions.keys())
-        return curr_dep_keys != old_dep_keys
+    @cached_method
+    def _has_updated_dependencies(self, *, key: AssetKey) -> bool:
+        provenance = self._get_current_logical_version_provenance(key=key)
+        if provenance is None:
+            return True
+        else:
+            curr_dep_keys = self._asset_graph.get_parents(key)
+            old_dep_keys = set(provenance.input_logical_versions.keys())
+            return curr_dep_keys != old_dep_keys
 
     def _compute_projected_new_materialization_logical_version(
         self, key: AssetKey
