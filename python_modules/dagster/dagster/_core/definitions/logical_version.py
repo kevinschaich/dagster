@@ -279,15 +279,15 @@ class CachingStaleStatusResolver:
             for dep_key in all_dep_keys:
                 if dep_key not in prov_versions:
                     yield StaleStatusCause(
-                        StaleStatus.STALE, [key], f"new input: {dep_key.to_user_string()}"
+                        StaleStatus.STALE, [key], f"new input: {dep_key.to_user_string()}"  # type: ignore  # fmt: skip
                     )
                 elif key not in proj_dep_keys:
                     yield StaleStatusCause(
-                        StaleStatus.STALE, [key], f"removed input: {dep_key.to_user_string()}"
+                        StaleStatus.STALE, [key], f"removed input: {dep_key.to_user_string()}"  # type: ignore  # fmt: skip
                     )
                 elif prov_versions[key] != self._get_projected_logical_version(key=dep_key):
                     yield StaleStatusCause(
-                        StaleStatus.STALE, [key], f"changed input: {dep_key.to_user_string()}"
+                        StaleStatus.STALE, [key], f"changed input: {dep_key.to_user_string()}"  # type: ignore  # fmt: skip
                     )
 
         for dep_key in proj_dep_keys:
