@@ -11,7 +11,9 @@ from dagster import (
     asset,
     io_manager,
     materialize,
+    observable_source_asset,
 )
+from dagster._core.definitions.asset_graph import AssetGraph
 from dagster._core.definitions.asset_out import AssetOut
 from dagster._core.definitions.decorators.asset_decorator import multi_asset
 from dagster._core.definitions.events import AssetKey, Output
@@ -19,7 +21,9 @@ from dagster._core.definitions.logical_version import (
     CODE_VERSION_TAG_KEY,
     INPUT_LOGICAL_VERSION_TAG_KEY_PREFIX,
     LOGICAL_VERSION_TAG_KEY,
+    CachingStaleStatusResolver,
     LogicalVersion,
+    StaleStatus,
     compute_logical_version,
 )
 from dagster._core.execution.execute_in_process_result import ExecuteInProcessResult
@@ -178,6 +182,13 @@ def materialize_twice(
     mat1 = materialize_asset(all_assets, asset_to_materialize, instance)
     mat2 = materialize_asset(all_assets, asset_to_materialize, instance)
     return mat1, mat2
+
+
+def get_stale_status_resolver(instance, assets) -> CachingStaleStatusResolver:
+    return CachingStaleStatusResolver(
+        instance=instance,
+        asset_graph=AssetGraph.from_assets(assets),
+    )
 
 
 # ########################
@@ -365,3 +376,51 @@ def test_multiple_code_versions():
     assert_code_version(alpha_mat, "a")
     assert_logical_version(beta_mat, compute_logical_version("b", {}))
     assert_code_version(beta_mat, "b")
+
+
+def test_stale_status():
+    x = 0
+
+    @observable_source_asset
+    def source1(_context):
+        nonlocal x
+        x = x + 1
+        return LogicalVersion(str(x))
+
+    @asset(code_version="abc")
+    def asset1(source1):
+        ...
+
+    @asset(code_version="xyz")
+    def asset2(asset1):
+        ...
+
+    all_assets = [source1, asset1, asset2]
+    instance = DagsterInstance.ephemeral()
+
+    materialize_asset(all_assets, source1, instance)
+    status_resolver = get_stale_status_resolver(instance, all_assets)
+    assert status_resolver.get_status(source1.key) == StaleStatus.FRESH
+    assert status_resolver.get_status(asset1.key) == StaleStatus.FRESH
+    assert status_resolver.get_status(asset2.key) == StaleStatus.STALE
+
+    status_resolver = get_stale_status_resolver(instance, all_assets)
+    assert status_resolver.get_status(source1.key) == StaleStatus.FRESH
+    assert status_resolver.get_status(asset1.key) == StaleStatus.STALE
+    assert status_resolver.get_status(asset2.key) == StaleStatus.STALE
+
+    materialize_asset(all_assets, asset1, instance)
+    status_resolver = get_stale_status_resolver(instance, all_assets)
+    assert status_resolver.get_status(source1.key) == StaleStatus.FRESH
+    assert status_resolver.get_status(asset1.key) == StaleStatus.FRESH
+    assert status_resolver.get_status(asset2.key) == StaleStatus.STALE
+
+    # asset2_mat1 = materialize_assets(all_assets, instance)[asset2.key]
+    # asset2_mat2 = materialize_assets(all_assets, instance)[asset2.key]
+    # asset2_mat3 = materialize_asset(all_assets, asset2, instance)
+    #
+    # assert_same_versions(asset2_mat1, asset2_mat2, "xyz")
+    # assert_same_versions(asset2_mat1, asset2_mat3, "xyz")
+    #
+    #
+    # assert status_resolver.get_status(asset1.key) == StaleStatus.FRESH

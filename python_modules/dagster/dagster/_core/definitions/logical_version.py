@@ -10,13 +10,13 @@ from dagster import _check as check
 from dagster._utils.cached_method import cached_method
 
 if TYPE_CHECKING:
+    from dagster._core.definitions.asset_graph import AssetGraph
     from dagster._core.definitions.events import (
         AssetKey,
         AssetMaterialization,
         AssetObservation,
         Materialization,
     )
-    from dagster._core.definitions.external_asset_graph import ExternalAssetGraph
     from dagster._core.events.log import EventLogEntry
     from dagster._core.instance import DagsterInstance
 
@@ -223,7 +223,7 @@ class CachingStaleStatusResolver:
     def __init__(
         self,
         instance: "DagsterInstance",
-        asset_graph: "ExternalAssetGraph",
+        asset_graph: "AssetGraph",
     ):
         self._instance = instance
         self._asset_graph = asset_graph
@@ -248,7 +248,7 @@ class CachingStaleStatusResolver:
         projected_version = self._get_projected_logical_version(key=key)
         if projected_version == UNKNOWN_LOGICAL_VERSION:
             return StaleStatus.UNKNOWN
-        elif projected_version == current_version:
+        elif projected_version == current_version:  # always true for source assets
             return StaleStatus.FRESH
         else:
             return StaleStatus.STALE
