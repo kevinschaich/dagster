@@ -7,7 +7,7 @@ from typing_extensions import Protocol, TypeAlias
 
 import dagster._check as check
 from dagster._annotations import PublicAttr, public
-from dagster._core.decorator_utils import is_context_provided
+from dagster._core.decorator_utils import has_at_least_one_parameter
 from dagster._core.definitions.events import AssetKey, AssetObservation, CoercibleToAssetKey
 from dagster._core.definitions.logical_version import LOGICAL_VERSION_TAG_KEY, LogicalVersion
 from dagster._core.definitions.metadata import (
@@ -181,12 +181,12 @@ class SourceAsset(ResourceAddable):
     def _get_op_def_compute_fn(self, observe_fn: SourceAssetObserveFunction):
         from dagster._core.definitions.decorators.solid_decorator import DecoratedOpFunction
 
-        observe_fn_has_context = is_context_provided(observe_fn)
+        observe_fn_has_context = has_at_least_one_parameter(observe_fn)
 
         def fn(context: OpExecutionContext):
             # This version of is_context_provided does not check if the parameter name is context
             # but is safe to use here since that is the only possible argument
-            logical_version = observe_fn(context) if observe_fn_has_context else observe_fn()  # type: ignore
+            logical_version = observe_fn(context) if observe_fn_has_context else observe_fn() # type: ignore
 
             check.inst(
                 logical_version,
