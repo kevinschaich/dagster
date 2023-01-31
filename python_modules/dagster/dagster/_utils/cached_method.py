@@ -1,11 +1,9 @@
 from functools import wraps
 from typing import AbstractSet, Callable, Dict, Hashable, Mapping, Tuple, Type, TypeVar
 
-from typing_extensions import Concatenate, Final, ParamSpec
+from typing_extensions import Concatenate, ParamSpec
 
 from dagster import _check as check
-
-NO_VALUE_IN_CACHE_SENTINEL: Final = object()
 
 S = TypeVar("S")
 T = TypeVar("T")
@@ -60,9 +58,8 @@ def cached_method(method: Callable[Concatenate[S, P], T]) -> Callable[Concatenat
             cache = getattr(self, cache_attr_name)
 
         key = _make_key(args, kwargs)
-        cached_result = cache.get(key, NO_VALUE_IN_CACHE_SENTINEL)
-        if cached_result is not NO_VALUE_IN_CACHE_SENTINEL:
-            return cached_result  # type: ignore
+        if key in cache:
+            return cache[key]
         else:
             result = method(self, *args, **kwargs)
             cache[key] = result
