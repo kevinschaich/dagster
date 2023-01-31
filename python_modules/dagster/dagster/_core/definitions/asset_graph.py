@@ -1,3 +1,5 @@
+# pyright: strict
+
 import functools
 from collections import deque
 from heapq import heapify, heappop, heappush
@@ -54,15 +56,15 @@ class AssetGraph:
         self._code_versions_by_key = code_versions_by_key
 
     @property
-    def asset_dep_graph(self):
+    def asset_dep_graph(self) -> DependencyGraph:
         return self._asset_dep_graph
 
     @property
-    def group_names_by_key(self):
+    def group_names_by_key(self) -> Mapping[AssetKey, Optional[str]]:
         return self._group_names_by_key
 
     @property
-    def source_asset_keys(self):
+    def source_asset_keys(self) -> AbstractSet[AssetKey]:
         return self._source_asset_keys
 
     @property
@@ -73,7 +75,7 @@ class AssetGraph:
         return AssetSelection.keys(*self.all_asset_keys).sources().resolve(self)
 
     @property
-    def freshness_policies_by_key(self):
+    def freshness_policies_by_key(self) -> Mapping[AssetKey, Optional[FreshnessPolicy]]:
         return self._freshness_policies_by_key
 
     @staticmethod
