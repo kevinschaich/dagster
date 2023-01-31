@@ -1,3 +1,5 @@
+# pyright: strict
+
 import hashlib
 import json
 import warnings
@@ -7,6 +9,7 @@ from typing import (
     Dict,
     Iterable,
     Iterator,
+    List,
     Mapping,
     Optional,
     Sequence,
@@ -401,7 +404,7 @@ class AssetsDefinition(ResourceAddable):
             resource_defs, "resource_defs", key_type=str, value_type=ResourceDefinition
         )
 
-        transformed_internal_asset_deps = {}
+        transformed_internal_asset_deps: Dict[AssetKey, AbstractSet[AssetKey]] = {}
         if internal_asset_deps:
             for output_name, asset_keys in internal_asset_deps.items():
                 check.invariant(
@@ -531,7 +534,7 @@ class AssetsDefinition(ResourceAddable):
     @property
     def dependency_keys(self) -> Iterable[AssetKey]:
         # the input asset keys that are directly upstream of a selected asset key
-        upstream_keys = set().union(*(self.asset_deps[key] for key in self.keys))
+        upstream_keys = {dep_key for key in self.keys for dep_key in self.asset_deps[key]}
         input_keys = set(self._keys_by_input_name.values())
         return upstream_keys.intersection(input_keys)
 
@@ -553,7 +556,7 @@ class AssetsDefinition(ResourceAddable):
 
     @property
     def keys_by_input_name(self) -> Mapping[str, AssetKey]:
-        upstream_keys = set().union(*(self.asset_deps[key] for key in self.keys))
+        upstream_keys = {dep_key for key in self.keys for dep_key in self.asset_deps[key]}
         return {
             name: key for name, key in self.node_keys_by_input_name.items() if key in upstream_keys
         }
@@ -568,12 +571,16 @@ class AssetsDefinition(ResourceAddable):
         return self._partitions_def
 
     @property
-    def metadata_by_key(self):
+    def metadata_by_key(self) -> Mapping[AssetKey, MetadataUserInput]:
         return self._metadata_by_key
 
     @property
-    def code_versions_by_key(self):
+    def code_versions_by_key(self) -> Mapping[AssetKey, Optional[str]]:
         return self._code_versions_by_key
+
+    @property
+    def partition_mappings(self) -> Mapping[AssetKey, PartitionMapping]:
+        return self._partition_mappings
 
     @public
     def get_partition_mapping(self, in_asset_key: AssetKey) -> Optional[PartitionMapping]:
@@ -602,7 +609,7 @@ class AssetsDefinition(ResourceAddable):
         returns the op def within the graph that produces the given asset key.
         """
         output_name = self.get_output_name_for_asset_key(key)
-        return cast(OpDefinition, self.node_def.resolve_output_to_origin_op_def(output_name))
+        return self.node_def.resolve_output_to_origin_op_def(output_name)
 
     def with_prefix_or_group(
         self,
@@ -694,7 +701,7 @@ class AssetsDefinition(ResourceAddable):
         selected_asset_keys: AbstractSet[AssetKey],
     ):
         from dagster._core.definitions.graph_definition import GraphDefinition
-        from dagster._core.selector.subset_selector import convert_dot_seperated_string_to_dict
+        from dagster._core.selector.subset_selector import convert_dot_separated_string_to_dict
 
         from .job_definition import get_subselected_graph_definition
 
@@ -707,7 +714,7 @@ class AssetsDefinition(ResourceAddable):
         dep_node_handles_by_asset_key = get_dep_node_handles_of_graph_backed_asset(
             self.node_def, self
         )
-        op_selection = []
+        op_selection: List[str] = []
         for asset_key in selected_asset_keys:
             dep_node_handles = dep_node_handles_by_asset_key[asset_key]
             for dep_node_handle in dep_node_handles:
@@ -720,7 +727,7 @@ class AssetsDefinition(ResourceAddable):
 
         resolved_op_selection_dict: Dict = {}
         for item in op_selection:
-            convert_dot_seperated_string_to_dict(resolved_op_selection_dict, splits=item.split("."))
+            convert_dot_separated_string_to_dict(resolved_op_selection_dict, splits=item.split("."))
 
         return get_subselected_graph_definition(self.node_def, resolved_op_selection_dict)
 

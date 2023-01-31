@@ -1,3 +1,5 @@
+# pyright: strict
+
 import re
 import sys
 from collections import defaultdict, deque
@@ -19,7 +21,9 @@ from typing import (
     Sequence,
     Set,
     Tuple,
+    Type,
     TypeVar,
+    Union,
 )
 
 from typing_extensions import Literal, TypeAlias
@@ -37,6 +41,7 @@ if TYPE_CHECKING:
 
 MAX_NUM = sys.maxsize
 
+T = TypeVar("T")
 T_Hashable = TypeVar("T_Hashable", bound=Hashable)
 Direction: TypeAlias = Literal["downstream", "upstream"]
 DependencyGraph: TypeAlias = Mapping[Direction, Mapping[T_Hashable, AbstractSet[T_Hashable]]]
@@ -216,7 +221,7 @@ class Traverser(Generic[T_Hashable]):
 
 def fetch_connected(
     item: T_Hashable,
-    graph: DependencyGraph,
+    graph: DependencyGraph[T_Hashable],
     *,
     direction: Direction,
     depth: Optional[int] = None,
@@ -230,7 +235,7 @@ def fetch_connected(
 
 
 def fetch_sinks(
-    graph: DependencyGraph, within_selection: AbstractSet[T_Hashable]
+    graph: DependencyGraph[T_Hashable], within_selection: AbstractSet[T_Hashable]
 ) -> AbstractSet[T_Hashable]:
     """
     A sink is an asset that has no downstream dependencies within the provided selection.
@@ -246,15 +251,15 @@ def fetch_sinks(
 
 
 def fetch_sources(
-    graph: DependencyGraph, within_selection: AbstractSet[T_Hashable]
+    graph: DependencyGraph[T_Hashable], within_selection: AbstractSet[T_Hashable]
 ) -> AbstractSet[T_Hashable]:
     """
     A source is a node that has no upstream dependencies within the provided selection.
     It can have other dependencies outside of the selection.
     """
-    dp = {}
+    dp: Dict[T_Hashable, bool] = {}
 
-    def has_upstream_within_selection(node):
+    def has_upstream_within_selection(node: T_Hashable) -> bool:
         if node not in dp:
             dp[node] = any(
                 parent_node in within_selection or has_upstream_within_selection(parent_node)
@@ -267,7 +272,7 @@ def fetch_sources(
 
 def fetch_connected_assets_definitions(
     asset: "AssetsDefinition",
-    graph: DependencyGraph,
+    graph: DependencyGraph[str],
     name_to_definition_map: Mapping[str, "AssetsDefinition"],
     *,
     direction: Direction,
@@ -317,7 +322,9 @@ def parse_items_from_selection(selection: Sequence[str]) -> Sequence[str]:
 
 
 def clause_to_subset(
-    graph: DependencyGraph, clause: str, item_name_to_item_fn: Callable[[str], T_Hashable]
+    graph: DependencyGraph[T_Hashable],
+    clause: str,
+    item_name_to_item_fn: Callable[[str], T_Hashable],
 ) -> Sequence[T_Hashable]:
     """Take a selection query and return a list of the selected and qualified items.
 
@@ -358,16 +365,21 @@ class LeafNodeSelection:
     """Marker for no further nesting selection needed."""
 
 
-def convert_dot_seperated_string_to_dict(
-    tree: Dict[str, Any], splits: Sequence[str]
-) -> Dict[str, Any]:
+BranchNodeSelection: TypeAlias = Dict[str, "SelectionTree"]
+SelectionTree: TypeAlias = Union[BranchNodeSelection, Type[LeafNodeSelection]]
+
+
+def convert_dot_separated_string_to_dict(
+    tree: SelectionTree, splits: Sequence[str]
+) -> SelectionTree:
     # For example:
-    # "subgraph.subsubgraph.return_one" => {"subgraph": {"subsubgraph": {"return_one": None}}}
+    # "subgraph.subsubgraph.return_one" => {"subgraph": {"subsubgraph": {"return_one":
+    # LeafNodeSelection}}}
     key = splits[0]
     if len(splits) == 1:
         tree[key] = LeafNodeSelection
     else:
-        tree[key] = convert_dot_seperated_string_to_dict(
+        tree[key] = convert_dot_separated_string_to_dict(
             tree[key] if key in tree else {}, splits[1:]
         )
     return tree
@@ -389,7 +401,7 @@ def parse_op_selection(job_def: "JobDefinition", op_selection: Sequence[str]) ->
     if any(["." in item for item in op_selection]):
         resolved_op_selection_dict: Dict[str, Any] = {}
         for item in op_selection:
-            convert_dot_seperated_string_to_dict(resolved_op_selection_dict, splits=item.split("."))
+            convert_dot_separated_string_to_dict(resolved_op_selection_dict, splits=item.split("."))
         return resolved_op_selection_dict
 
     return {
@@ -528,7 +540,7 @@ def parse_asset_selection(
 
     # special case: select *
     if len(asset_selection) == 1 and asset_selection[0] == "*":
-        return set().union(*(ad.keys for ad in assets_defs))
+        return {key for ad in assets_defs for key in ad.keys}
 
     graph = generate_asset_dep_graph(assets_defs, source_assets)
     assets_set: Set[AssetKey] = set()

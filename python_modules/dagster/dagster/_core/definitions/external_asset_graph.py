@@ -1,3 +1,5 @@
+# pyright: strict
+
 from collections import defaultdict
 from typing import (
     TYPE_CHECKING,
@@ -29,7 +31,7 @@ if TYPE_CHECKING:
 class ExternalAssetGraph(AssetGraph):
     def __init__(
         self,
-        asset_dep_graph: DependencyGraph,
+        asset_dep_graph: DependencyGraph[AssetKey],
         source_asset_keys: AbstractSet[AssetKey],
         partitions_defs_by_key: Mapping[AssetKey, Optional[PartitionsDefinition]],
         partition_mappings_by_key: Mapping[AssetKey, Optional[Mapping[AssetKey, PartitionMapping]]],
@@ -91,9 +93,9 @@ class ExternalAssetGraph(AssetGraph):
         cls,
         repo_handle_external_asset_nodes: Sequence[Tuple[RepositoryHandle, "ExternalAssetNode"]],
     ) -> "ExternalAssetGraph":
-        upstream = {}
-        source_asset_keys = set()
-        partitions_defs_by_key = {}
+        upstream: Dict[AssetKey, AbstractSet[AssetKey]] = {}
+        source_asset_keys: Set[AssetKey] = set()
+        partitions_defs_by_key: Dict[AssetKey, Optional[PartitionsDefinition]] = {}
         partition_mappings_by_key: Dict[AssetKey, Dict[AssetKey, PartitionMapping]] = defaultdict(
             defaultdict
         )
@@ -120,7 +122,7 @@ class ExternalAssetGraph(AssetGraph):
             node.asset_key for _, node in repo_handle_external_asset_nodes if not node.is_source
         }
 
-        for repo_handle, node in repo_handle_external_asset_nodes:
+        for _repo_handle, node in repo_handle_external_asset_nodes:
             if node.is_source:
                 if node.asset_key in all_non_source_keys:
                     # one repo's source is another repo's non-source

@@ -63,7 +63,7 @@ from .utils import check_valid_name, validate_tags
 
 DEFAULT_DATE_FORMAT = "%Y-%m-%d"
 
-T = TypeVar("T")
+T = TypeVar("T", default=Any)
 
 
 RawPartitionFunction: TypeAlias = Union[
