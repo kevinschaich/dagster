@@ -231,8 +231,8 @@ class CachingStaleStatusResolver:
     def get_status(self, key: AssetKey) -> StaleStatus:
         return self._get_status(key=key)
 
-    def get_status_lineage(self, key: AssetKey) -> Sequence[StaleStatusCause]:
-        return self._get_status_lineage(key=key)
+    def get_status_causes(self, key: AssetKey) -> Sequence[StaleStatusCause]:
+        return self._get_status_causes(key=key)
 
     def get_current_logical_version(self, key: AssetKey) -> LogicalVersion:
         return self._get_current_logical_version(key=key)
@@ -254,15 +254,15 @@ class CachingStaleStatusResolver:
             return StaleStatus.STALE
 
     @cached_method
-    def _get_status_lineage(self, key: AssetKey) -> Sequence[StaleStatusCause]:
+    def _get_status_causes(self, key: AssetKey) -> Sequence[StaleStatusCause]:
         if self._get_status(key) == StaleStatus.FRESH:
             return []
         elif self._get_current_logical_version(key=key) == NULL_LOGICAL_VERSION:
             return [StaleStatusCause(StaleStatus.STALE, [key], "never materialized")]
         else:
-            return list(self._get_stale_status_lineage_materialized(key))
+            return list(self._get_stale_status_causes_materialized(key))
 
-    def _get_stale_status_lineage_materialized(self, key: AssetKey) -> Iterator[StaleStatusCause]:
+    def _get_stale_status_causes_materialized(self, key: AssetKey) -> Iterator[StaleStatusCause]:
         code_version = self._asset_graph.get_code_version(key)
         provenance = self._get_current_logical_version_provenance(key=key)
         if code_version is None:
@@ -291,7 +291,7 @@ class CachingStaleStatusResolver:
                     )
 
         for dep_key in proj_dep_keys:
-            for cause in self._get_status_lineage(key=dep_key):
+            for cause in self._get_status_causes(key=dep_key):
                 yield cause.with_path_step(key)
 
     @cached_method
