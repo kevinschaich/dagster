@@ -41,6 +41,12 @@ class GrapheneSchedule(graphene.ObjectType):
     futureTick = graphene.NonNull(
         GrapheneDryRunInstigationTick, tick_timestamp=graphene.NonNull(graphene.Int)
     )
+    ticksFromTimestamp = graphene.NonNull(
+        graphene.List(graphene.Float),
+        start_timestamp=graphene.Float(),
+        upper_limit=graphene.Int(),
+        lower_limit=graphene.Int(),
+    )
 
     class Meta:
         name = "Schedule"
@@ -143,6 +149,32 @@ class GrapheneSchedule(graphene.ObjectType):
         return GrapheneDryRunInstigationTick(
             self._external_schedule.schedule_selector, float(tick_timestamp)
         )
+
+    def resolve_ticksFromTimestamp(self, _graphene_info: ResolveInfo, **kwargs: Dict[str, Any]):
+        """Get timestamps when ticks will occur before and after a given timestamp.
+
+        upper_limit defines how many ticks will be retrieved after the current timestamp, and lower_limit defines how many ticks will be retrieved before the current timestamp.
+        """
+        start_timestamp = cast(
+            float,
+            kwargs.get(
+                "start_timestamp", get_timestamp_from_utc_datetime(get_current_datetime_in_utc())
+            ),
+        )
+        tick_times = []
+        ascending_tick_iterator = self._external_schedule.execution_time_iterator(start_timestamp)
+        descending_tick_iterator = self._external_schedule.execution_time_iterator(
+            start_timestamp, ascending=False
+        )
+
+        upper_limit = cast(int, kwargs.get("upper_limit", 10))
+        lower_limit = cast(int, kwargs.get("lower_limit", 10))
+
+        tick_times = [next(descending_tick_iterator).timestamp() for _ in range(lower_limit)][
+            ::-1
+        ] + [next(ascending_tick_iterator).timestamp() for _ in range(upper_limit)]
+
+        return tick_times
 
 
 class GrapheneScheduleOrError(graphene.Union):

@@ -14,6 +14,7 @@ from dagster._core.scheduler.instigation import (
     ScheduleInstigatorData,
 )
 from dagster._core.types.loadable_target_origin import LoadableTargetOrigin
+from dagster._seven import get_current_datetime_in_utc, get_timestamp_from_utc_datetime
 from dagster._seven.compat.pendulum import create_pendulum_time
 from dagster._utils import Counter, traced_counter
 from dagster_graphql.test.utils import (
@@ -84,6 +85,7 @@ query getSchedule($scheduleSelector: ScheduleSelector!, $ticksAfter: Float) {
         }
         cursor
       }
+      ticksFromTimestamp(startTimestamp: $ticksAfter, upperLimit: 3, lowerLimit: 3)
       scheduleState {
         id
         selectorId
@@ -232,6 +234,34 @@ query RepositorySchedulesQuery($repositorySelector: RepositorySelector!) {
 }
 """
 
+SCHEDULE_DRY_RUN_MUTATION = """
+mutation($selectorData: ScheduleSelector!, $timestamp: Float) {
+  scheduleDryRun(selectorData: $selectorData, timestamp: $timestamp) {
+    __typename
+    ... on PythonError {
+      message
+      stack
+    }
+    ... on DryRunInstigationTick {
+      timestamp
+      evaluationResult {
+        runRequests {
+          runConfigYaml
+        }
+        skipReason
+        error {
+          message
+          stack
+        }
+      }
+    }
+    ... on ScheduleNotFoundError {
+      scheduleName
+    }
+  }
+}
+"""
+
 
 def default_execution_params():
     return {
@@ -250,6 +280,79 @@ def _get_unloadable_schedule_origin(name):
     return ExternalRepositoryOrigin(
         InProcessRepositoryLocationOrigin(loadable_target_origin), "fake_repository"
     ).get_instigator_origin(name)
+
+
+def test_schedule_dry_run(graphql_context):
+    context = graphql_context
+
+    schedule_selector = infer_schedule_selector(context, "provide_config_schedule")
+
+    # fetch schedule before reconcile
+    timestamp = get_timestamp_from_utc_datetime(get_current_datetime_in_utc())
+    result = execute_dagster_graphql(
+        context,
+        SCHEDULE_DRY_RUN_MUTATION,
+        variables={
+            "selectorData": schedule_selector,
+            "timestamp": timestamp,
+        },
+    )
+    assert result.data
+    assert result.data["scheduleDryRun"]["__typename"] == "DryRunInstigationTick"
+    assert result.data["scheduleDryRun"]["timestamp"] == timestamp
+    evaluation_result = result.data["scheduleDryRun"]["evaluationResult"]
+    assert len(evaluation_result["runRequests"]) == 1
+    assert "foo: bar" in evaluation_result["runRequests"][0]["runConfigYaml"]
+    assert not evaluation_result["skipReason"]
+    assert not evaluation_result["error"]
+
+
+def test_schedule_dry_run_errors(graphql_context):
+    context = graphql_context
+
+    schedule_selector = infer_schedule_selector(context, "always_error")
+
+    # fetch schedule before reconcile
+    timestamp = get_timestamp_from_utc_datetime(get_current_datetime_in_utc())
+    result = execute_dagster_graphql(
+        context,
+        SCHEDULE_DRY_RUN_MUTATION,
+        variables={
+            "selectorData": schedule_selector,
+            "timestamp": timestamp,
+        },
+    )
+    assert result.data
+    assert result.data["scheduleDryRun"]["__typename"] == "DryRunInstigationTick"
+    assert result.data["scheduleDryRun"]["timestamp"] == timestamp
+    evaluation_result = result.data["scheduleDryRun"]["evaluationResult"]
+    assert not evaluation_result["runRequests"]
+    assert not evaluation_result["skipReason"]
+    assert (
+        "Error occurred during the evaluation of schedule always_error"
+        in evaluation_result["error"]["message"]
+    )
+
+
+def test_dry_run_nonexistent_schedule(graphql_context):
+    context = graphql_context
+
+    schedule_selector = infer_schedule_selector(context, "schedule_doesnt_exist")
+
+    # fetch schedule before reconcile
+    timestamp = get_timestamp_from_utc_datetime(get_current_datetime_in_utc())
+    result = execute_dagster_graphql(
+        context,
+        SCHEDULE_DRY_RUN_MUTATION,
+        variables={
+            "selectorData": schedule_selector,
+            "timestamp": timestamp,
+        },
+    )
+    assert result.data
+    assert result.data["scheduleDryRun"]["__typename"] == "DryRunInstigationTick"
+    assert result.data["scheduleDryRun"]["timestamp"] == timestamp
+    assert not result.data["scheduleDryRun"]["evaluationResult"]
 
 
 def test_get_schedule_definitions_for_repository(graphql_context):
@@ -435,6 +538,23 @@ def test_next_tick(graphql_context):
         assert tick["evaluationResult"]
         assert tick["evaluationResult"]["runRequests"]
         assert len(tick["evaluationResult"]["runRequests"]) == 1
+
+
+def test_ticks_from_timestamp(graphql_context):
+    schedule_selector = infer_schedule_selector(graphql_context, "past_tick_schedule")
+
+    # get schedule past ticks
+    cur_timestamp = get_timestamp_from_utc_datetime(get_current_datetime_in_utc())
+    result = execute_dagster_graphql(
+        graphql_context,
+        GET_SCHEDULE_QUERY,
+        variables={"scheduleSelector": schedule_selector, "ticksAfter": cur_timestamp},
+    )
+
+    ticks = result.data["scheduleOrError"]["ticksFromTimestamp"]
+    assert len(ticks) == 6
+    assert len([tick for tick in ticks if tick > cur_timestamp]) == 3
+    assert len([tick for tick in ticks if tick <= cur_timestamp]) == 3
 
 
 def test_next_tick_bad_schedule(graphql_context):
