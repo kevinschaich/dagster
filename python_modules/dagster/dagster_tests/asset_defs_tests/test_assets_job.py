@@ -33,9 +33,13 @@ from dagster import (
 )
 from dagster._config import StringSource
 from dagster._core.definitions import AssetGroup, AssetIn, SourceAsset, asset, build_assets_job
+from dagster._core.definitions.asset_selection import AssetSelection
 from dagster._core.definitions.assets_job import get_base_asset_jobs
+from dagster._core.definitions.decorators.source_asset_decorator import observable_source_asset
+from dagster._core.definitions.definitions_class import Definitions
 from dagster._core.definitions.dependency import NodeHandle
 from dagster._core.definitions.executor_definition import in_process_executor
+from dagster._core.definitions.logical_version import LogicalVersion
 from dagster._core.errors import DagsterInvalidSubsetError
 from dagster._core.execution.api import execute_pipeline, execute_run_iterator
 from dagster._core.snap import DependencyStructureIndex
@@ -64,6 +68,7 @@ def check_experimental_warnings():
                 "resource_defs" in w.message.args[0]
                 or "io_manager_def" in w.message.args[0]
                 or "build_assets_job" in w.message.args[0]
+                or "observable_source_asset" in w.message.args[0]
             ):
                 continue
             assert False, f"Unexpected warning: {w.message.args[0]}"
@@ -1941,3 +1946,23 @@ def test_get_base_asset_jobs_multiple_partitions_defs():
         frozenset(["hourly_asset", "unpartitioned_asset"]),
         frozenset(["daily_asset_different_start_date", "unpartitioned_asset"]),
     }
+
+
+def test_define_asset_job_source_assets():
+    @observable_source_asset
+    def foo(context):
+        return LogicalVersion("foo")
+
+    @observable_source_asset
+    def bar(context):
+        return LogicalVersion("bar")
+
+    source_asset_job = define_asset_job("source_asset_job", AssetSelection.keys("foo", "bar"))
+
+    defs = Definitions(
+        assets=[foo, bar],
+        jobs=[source_asset_job],
+    )
+
+    result = defs.get_job_def("source_asset_job").execute_in_process()
+    assert result.success
