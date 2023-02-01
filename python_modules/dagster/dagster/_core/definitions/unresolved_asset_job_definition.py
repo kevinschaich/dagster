@@ -209,7 +209,11 @@ def define_asset_job(
     name: str,
     selection: Optional[
         Union[
-            str, Sequence[str], Sequence[AssetKey], Sequence["AssetsDefinition"], "AssetSelection"
+            str,
+            Sequence[str],
+            Sequence[AssetKey],
+            Sequence[Union["AssetsDefinition", "SourceAsset"]],
+            "AssetSelection",
         ]
     ] = None,
     config: Optional[Union[ConfigMapping, Mapping[str, Any], "PartitionedConfig[object]"]] = None,
@@ -308,7 +312,7 @@ def define_asset_job(
                 resources={"slack_client": prod_slack_client},
             )
     """
-    from dagster._core.definitions import AssetsDefinition, AssetSelection
+    from dagster._core.definitions import AssetsDefinition, AssetSelection, SourceAsset
 
     # convert string-based selections to AssetSelection objects
     resolved_selection: AssetSelection
@@ -324,6 +328,8 @@ def define_asset_job(
         )
     elif isinstance(selection, list) and all(isinstance(el, AssetsDefinition) for el in selection):
         resolved_selection = AssetSelection.assets(*cast(Sequence[AssetsDefinition], selection))
+    elif isinstance(selection, list) and all(isinstance(el, SourceAsset) for el in selection):
+        resolved_selection = AssetSelection.source_assets(*cast(Sequence[SourceAsset], selection))
     elif isinstance(selection, list) and all(isinstance(el, AssetKey) for el in selection):
         resolved_selection = AssetSelection.keys(*cast(Sequence[AssetKey], selection))
     else:
