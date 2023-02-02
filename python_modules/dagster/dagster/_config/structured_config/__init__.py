@@ -5,6 +5,7 @@ from typing_extensions import TypeAlias
 
 from dagster._config.config_type import ConfigType
 from dagster._config.source import BoolSource, IntSource, StringSource
+from dagster._config.structured_config.typing_utils import AllowPartialResourceInitParams
 from dagster._core.definitions.definition_config_schema import IDefinitionConfigSchema
 from dagster._core.execution.context.init import InitResourceContext
 
@@ -119,6 +120,7 @@ class Resource(
     Generic[ResValue],
     ResourceDefinition,
     Config,
+    AllowPartialResourceInitParams,
 ):
     """
     Base class for Dagster resources that utilize structured config.
@@ -165,24 +167,6 @@ class Resource(
         set at runtime.
         """
         return PartialResource(cls, data=kwargs)
-
-    # The following methods are used to implement the descriptor protocol
-    # https://docs.python.org/3/howto/de scriptor.html
-    #
-    # Used to adjust the types of resource inputs and outputs, e.g. resource dependencies can be passed in
-    # as PartialResources or Resources, but will always be returned as Resources
-    # Very similar to https://github.com/pydantic/pydantic/discussions/4262
-
-    def __set_name__(self, _owner, name):
-        self._assigned_name = name
-
-    def __get__(self: Self, obj: Any, __owner: Any) -> Self:
-        return cast(Self, getattr(obj, self._assigned_name))
-
-    def __set__(
-        self: Self, obj: Optional[object], value: Union[Self, "PartialResource[Self]"]
-    ) -> None:
-        setattr(obj, self._assigned_name, value)
 
 
 class PartialResource(Generic[ResValue], ResourceDefinition, MakeConfigCacheable):
