@@ -102,18 +102,17 @@ def materialize_to_memory(
     Returns:
         ExecuteInProcessResult: The result of the execution.
     """
-    from dagster._core.execution.build_resources import wrap_resources_for_execution
-
     assets = check.sequence_param(assets, "assets", of_type=(AssetsDefinition, SourceAsset))
-    resource_defs = wrap_resources_for_execution(resources)
+
     # Gather all resource defs for the purpose of checking io managers.
-    all_resource_defs = dict(resource_defs)
+    resources_dict = resources or {}
+    all_resource_keys = set(resources_dict.keys())
     for asset in assets:
-        all_resource_defs = merge_dicts(asset.resource_defs, all_resource_defs)
+        all_resource_keys = all_resource_keys.union(asset.resource_defs.keys())
 
     io_manager_keys = _get_required_io_manager_keys(assets)
     for io_manager_key in io_manager_keys:
-        if io_manager_key in all_resource_defs:
+        if io_manager_key in all_resource_keys:
             raise DagsterInvariantViolationError(
                 "Attempted to call `materialize_to_memory` with a resource "
                 f"provided for io manager key '{io_manager_key}'. Do not "
@@ -121,7 +120,8 @@ def materialize_to_memory(
                 "`materialize_to_memory`, as it will override io management "
                 "behavior for all keys."
             )
-    resource_defs = merge_dicts({key: mem_io_manager for key in io_manager_keys}, resource_defs)
+
+    resource_defs = merge_dicts({key: mem_io_manager for key in io_manager_keys}, resources_dict)
 
     return materialize(
         assets=assets,
