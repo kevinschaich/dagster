@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING, Any, Mapping, Optional, Sequence, Set, Union
 
 import dagster._check as check
+from dagster._core.definitions.events import AssetKey
 from dagster._utils.merger import merge_dicts
 
 from ..errors import DagsterInvariantViolationError
@@ -51,7 +52,7 @@ def materialize(
     partition_key = check.opt_str_param(partition_key, "partition_key")
     resources = check.opt_mapping_param(resources, "resources", key_type=str)
 
-    all_executable_keys = set()
+    all_executable_keys: Set[AssetKey] = set()
     for asset in assets:
         if isinstance(asset, AssetsDefinition):
             all_executable_keys = all_executable_keys.union(set(asset.keys))

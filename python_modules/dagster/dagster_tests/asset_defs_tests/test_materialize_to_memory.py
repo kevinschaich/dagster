@@ -116,6 +116,7 @@ def test_materialize_conflicting_resources():
         materialize_to_memory([first, second])
 
     with pytest.raises(
+        # TODO: which error is best this or DagsterInvalidDefinitionError?
         DagsterInvalidInvocationError,
         # match=(
         #     "resource with key 'foo' provided to job conflicts with resource provided to assets."
