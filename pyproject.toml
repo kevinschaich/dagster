@@ -95,6 +95,10 @@ useLibraryCodeForTypes = false
 # We use ruff for this.
 reportInvalidStringEscapeSequence = false
 
+# As of 2023-02-02, there are still lot of `py.typed` libs that are not compliant with the standards
+# for defining a public API.
+reportPrivateImportUsage = false
+
 # ########################
 # ##### PYTEST
 # ########################
