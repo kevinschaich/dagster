@@ -1,8 +1,6 @@
-import warnings
 from typing import TYPE_CHECKING, Any, Mapping, Optional, Sequence, Set, Union
 
 import dagster._check as check
-from dagster._utils.backcompat import ExperimentalWarning
 from dagster._utils.merger import merge_dicts
 
 from ..errors import DagsterInvariantViolationError
@@ -10,10 +8,7 @@ from ..instance import DagsterInstance
 from ..storage.io_manager import IOManagerDefinition
 from ..storage.mem_io_manager import mem_io_manager
 from .assets import AssetsDefinition
-from .assets_job import build_assets_job
-from .job_definition import default_job_io_manager_with_fs_io_manager_schema
 from .source_asset import SourceAsset
-from .utils import DEFAULT_IO_MANAGER_KEY
 
 if TYPE_CHECKING:
     from ..execution.execute_in_process_result import ExecuteInProcessResult
@@ -49,36 +44,30 @@ def materialize(
     Returns:
         ExecuteInProcessResult: The result of the execution.
     """
-    from ..execution.build_resources import wrap_resources_for_execution
+    from dagster._core.definitions.definitions_class import Definitions
 
     assets = check.sequence_param(assets, "assets", of_type=(AssetsDefinition, SourceAsset))
-    assets_defs = [the_def for the_def in assets if isinstance(the_def, AssetsDefinition)]
-    source_assets = [the_def for the_def in assets if isinstance(the_def, SourceAsset)]
     instance = check.opt_inst_param(instance, "instance", DagsterInstance)
     partition_key = check.opt_str_param(partition_key, "partition_key")
     resources = check.opt_mapping_param(resources, "resources", key_type=str)
-    resource_defs = wrap_resources_for_execution(resources)
-    resource_defs = merge_dicts(
-        {DEFAULT_IO_MANAGER_KEY: default_job_io_manager_with_fs_io_manager_schema}, resource_defs
+
+    all_executable_keys = set()
+    for asset in assets:
+        if isinstance(asset, AssetsDefinition):
+            all_executable_keys = all_executable_keys.union(set(asset.keys))
+
+    defs = Definitions(assets=assets, resources=resources)
+    return check.not_none(
+        # this currently does not work for no asset key use case
+        defs.get_implicit_job_def_for_assets(all_executable_keys),
+        "This should always return a job",
+    ).execute_in_process(
+        run_config=run_config,
+        instance=instance,
+        partition_key=partition_key,
+        raise_on_error=raise_on_error,
+        tags=tags,
     )
-
-    with warnings.catch_warnings():
-        warnings.filterwarnings(
-            "ignore", category=ExperimentalWarning, message=".*build_assets_job.*"
-        )
-
-        return build_assets_job(
-            "in_process_materialization_job",
-            assets=assets_defs,
-            source_assets=source_assets,
-            resource_defs=resource_defs,
-        ).execute_in_process(
-            run_config=run_config,
-            instance=instance,
-            partition_key=partition_key,
-            raise_on_error=raise_on_error,
-            tags=tags,
-        )
 
 
 def materialize_to_memory(
@@ -133,29 +122,16 @@ def materialize_to_memory(
                 "behavior for all keys."
             )
     resource_defs = merge_dicts({key: mem_io_manager for key in io_manager_keys}, resource_defs)
-    assets_defs = [the_def for the_def in assets if isinstance(the_def, AssetsDefinition)]
-    source_assets = [the_def for the_def in assets if isinstance(the_def, SourceAsset)]
 
-    instance = check.opt_inst_param(instance, "instance", DagsterInstance)
-    partition_key = check.opt_str_param(partition_key, "partition_key")
-
-    with warnings.catch_warnings():
-        warnings.filterwarnings(
-            "ignore", category=ExperimentalWarning, message=".*build_assets_job.*"
-        )
-
-        return build_assets_job(
-            "in_process_materialization_job",
-            assets=assets_defs,
-            source_assets=source_assets,
-            resource_defs=resource_defs,
-        ).execute_in_process(
-            run_config=run_config,
-            instance=instance,
-            partition_key=partition_key,
-            raise_on_error=raise_on_error,
-            tags=tags,
-        )
+    return materialize(
+        assets=assets,
+        run_config=run_config,
+        resources=resource_defs,
+        instance=instance,
+        partition_key=partition_key,
+        raise_on_error=raise_on_error,
+        tags=tags,
+    )
 
 
 def _get_required_io_manager_keys(
