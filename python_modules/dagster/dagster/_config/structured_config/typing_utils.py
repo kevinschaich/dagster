@@ -8,8 +8,6 @@ from .utils import safe_is_subclass
 if TYPE_CHECKING:
     from dagster._config.structured_config import PartialResource
 
-Self = TypeVar("Self", bound="AllowPartialResourceInitParams")
-
 
 # Since a metaclass is invoked by Resource before Resource or PartialResource is defined, we need to
 # define a temporary class to use as a placeholder for use in the initial metaclass invocation.
@@ -74,6 +72,9 @@ class BaseResourceMeta(pydantic.main.ModelMetaclass):
 
         namespaces["__annotations__"] = annotations
         return super().__new__(self, name, bases, namespaces, **kwargs)
+
+
+Self = TypeVar("Self", bound="AllowPartialResourceInitParams")
 
 
 class AllowPartialResourceInitParams:
